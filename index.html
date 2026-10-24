@@ -834,6 +834,9 @@ th.num .th-sort{flex-direction:row}
 .kpi dt{font-size:13.5px;font-weight:550;font-stretch:100%;color:var(--ink-2)}
 .kpi dd{font-size:26px;font-weight:720;font-stretch:115%;letter-spacing:-.02em;margin-top:4px}
 @media (max-width:900px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* cart notices wrap inside the order panel */
+.cart-note{display:block;margin-top:8px;padding:8px 10px;border-radius:8px;font-size:13px;font-weight:600;line-height:1.45;white-space:normal;color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.cart-note .btn{margin-top:6px;display:inline-flex}
 
 </style>
 <script src="config.js"></script>
@@ -932,10 +935,12 @@ function qty(v, dp = 3) {
 /* Quantities: stored to 6 decimals so conversions stay exact, shown to 3 (5.780 kg) */
 const q3 = v => Math.round(v * 1000) / 1000;
 const q6 = v => Math.round(v * 1e6) / 1e6;
-function fq(v) {
+const DEC_UNITS = new Set(['kg', 'kgs', 'kilo', 'kilos', 'kilogram', 'kilograms', 'l', 'liter', 'liters', 'litre', 'litres', 'lb', 'lbs']);
+const isDecUnit = u => DEC_UNITS.has(String(u || '').trim().toLowerCase());
+function fq(v, unit) {
   if (v == null || !Number.isFinite(v)) return '—';
   const r = q3(v);
-  if (Number.isInteger(r)) return qty(r);
+  if (Number.isInteger(r) && !isDecUnit(unit)) return qty(r);
   return (r < 0 ? '−' : '') + Math.abs(r).toLocaleString('en-US', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 }
 const PURCHASE_TAX = [['', 'Not set'], ['vatable', 'VATable purchase (with input VAT)'], ['exempt', 'VAT-exempt purchase'], ['zero', 'Zero-rated purchase']];
@@ -956,7 +961,7 @@ function unitFactor(m, u) {
 function unitSelectHtml(m) {
   const ch = unitChoices(m);
   if (ch.length <= 1) return `<span data-unit>${esc(ch[0] || '')}</span>`;
-  return `<select data-k="unit" class="unit-sel" aria-label="Unit for ${esc(m.name)}">${ch.map(u => `<option value="${esc(u)}">${esc(m.buyUnit && nu(u) === nu(m.buyUnit) ? `${u} (${fq(num(m.buyFactor))} ${m.unit})` : u)}</option>`).join('')}</select>`;
+  return `<select data-k="unit" class="unit-sel" aria-label="Unit for ${esc(m.name)}">${ch.map(u => `<option value="${esc(u)}">${esc(m.buyUnit && nu(u) === nu(m.buyUnit) ? `${u} (${fq(num(m.buyFactor), m.unit)} ${m.unit})` : u)}</option>`).join('')}</select>`;
 }
 function setUnitPicker(line, m) {
   const w = line.querySelector('[data-unitwrap]'); if (!w) return;
@@ -2372,7 +2377,7 @@ Views.stock = {
     $('[data-dash]', el).innerHTML = M.length ? `
       <section class="card" aria-labelledby="dl-h"><div class="card-head"><h2 id="dl-h">Recent deliveries</h2><button type="button" class="link" data-all-deliveries>View all deliveries</button></div>
         ${dels.length ? `<ul class="feed">${dels.map(e => { const m = model.matById[e.materialId] || model.allMats.find(x => x.id === e.materialId); const nm = m ? m.name : 'Removed material';
-          return `<li><span class="feed-ico" aria-hidden="true">${ICON.receive}</span><span class="feed-main"><b>${esc(nm)}, ${esc(fq(num(e.qty)))} ${esc(e.unit || (m && m.unit) || '')} at ${esc(money(num(e.unitCost)))}</b><span>${esc(fmtDate(e.date))}${e.supplier ? ', ' + esc(e.supplier) : ''}</span></span><span class="feed-amt">${money((num(e.qty) || 0) * (num(e.unitCost) || 0))}</span></li>`; }).join('')}</ul>`
+          return `<li><span class="feed-ico" aria-hidden="true">${ICON.receive}</span><span class="feed-main"><b>${esc(nm)}, ${esc(fq(num(e.qty), e.unit || (m && m.unit)))} ${esc(e.unit || (m && m.unit) || '')} at ${esc(money(num(e.unitCost)))}</b><span>${esc(fmtDate(e.date))}${e.supplier ? ', ' + esc(e.supplier) : ''}</span></span><span class="feed-amt">${money((num(e.qty) || 0) * (num(e.unitCost) || 0))}</span></li>`; }).join('')}</ul>`
           : `<p class="feed-empty">No deliveries recorded yet. Use Receive delivery when stock arrives.</p>`}
       </section>
       <section class="card" aria-labelledby="vc-h"><div class="card-head"><h2 id="vc-h">Stock value by category</h2></div>
@@ -2393,8 +2398,8 @@ Views.stock = {
       ${pg.list.map(m => `<tr data-open="mat" data-id="${esc(m.id)}">
         <td class="sticky c-main"><span class="name">${esc(m.name)}</span>${pendingTag('materials/' + m.id)}<div class="small faint">${[m.sku ? 'SKU ' + esc(m.sku) : '', m.supplier ? esc(m.supplier) : ''].filter(Boolean).join(', ')}</div></td>
         <td class="c-main">${catChip(m.category)}</td>
-        <td class="num c-side"><b>${fq(m.onHand)}</b> <span class="faint">${esc(m.unit)}</span></td>
-        <td class="num c-hide" data-label="Minimum">${num(m.minStock) ? fq(num(m.minStock)) : '<span class="faint">Not set</span>'}</td>
+        <td class="num c-side"><b>${fq(m.onHand, m.unit)}</b> <span class="faint">${esc(m.unit)}</span></td>
+        <td class="num c-hide" data-label="Minimum">${num(m.minStock) ? fq(num(m.minStock), m.unit) : '<span class="faint">Not set</span>'}</td>
         <td class="c-wide">${stPill(MAT_STATUS, m.status)}</td>
         <td class="num c-hide" data-label="Avg cost">${M_(m.wac)}</td>
         <td class="num c-side" data-label="Value">${m.onHand ? money(m.value) : '<span class="faint">—</span>'}</td>
@@ -2486,7 +2491,7 @@ Views.movements = {
       body += `<tr class="${e.void ? 'void' : ''}">
         <td class="sticky"><span class="name">${esc(title)}</span>${pendingTag('e/' + e.id)}</td>
         <td class="nowrap">${esc(TYPES[e.type] || e.type)}</td>
-        <td class="num ${e.type === 'production' ? '' : signed > 0 ? 'pos' : signed < 0 ? 'neg' : ''}">${signed > 0 && e.type !== 'production' ? '+' : ''}${e.materialId ? fq(signed) : qty(signed)} <span class="faint">${unitTxt}</span>${e.entered && e.entered.unit ? `<div class="small faint">Entered as ${esc(fq(num(e.entered.qty)))} ${esc(e.entered.unit)}</div>` : ''}</td>
+        <td class="num ${e.type === 'production' ? '' : signed > 0 ? 'pos' : signed < 0 ? 'neg' : ''}">${signed > 0 && e.type !== 'production' ? '+' : ''}${e.materialId ? fq(signed, unitTxt) : qty(signed)} <span class="faint">${unitTxt}</span>${e.entered && e.entered.unit ? `<div class="small faint">Entered as ${esc(fq(num(e.entered.qty)))} ${esc(e.entered.unit)}</div>` : ''}</td>
         <td class="num">${M(ucost)}</td>
         <td class="num">${M(val)}</td>
         <td>${whoWhere}</td>
@@ -3197,10 +3202,10 @@ function openMaterial(id) {
         <button class="btn ghost" data-mact="edit">${ICON.edit}Edit</button>
       </div>
       <dl class="facts">
-        <div><dt>On hand</dt><dd><b>${fq(m.onHand)}</b> ${esc(m.unit)}</dd></div>
+        <div><dt>On hand</dt><dd><b>${fq(m.onHand, m.unit)}</b> ${esc(m.unit)}</dd></div>
         ${m.sku ? `<div><dt>SKU</dt><dd>${esc(m.sku)}</dd></div>` : ''}
-        ${m.buyUnit && num(m.buyFactor) > 0 ? `<div><dt>Purchase unit</dt><dd>1 ${esc(m.buyUnit)} = ${fq(num(m.buyFactor))} ${esc(m.unit)}</dd></div>` : ''}
-        <div><dt>Used as</dt><dd>${[m.useInRecipes === false ? '' : 'Recipe ingredient', m.sellable ? `Sold directly${num(m.sellStep) > 0 && num(m.sellStep) !== 1 ? `, steps of ${fq(num(m.sellStep))} ${esc(m.unit)}` : ''}` : ''].filter(Boolean).join('; ') || '<span class="faint">Not set</span>'}</dd></div>
+        ${m.buyUnit && num(m.buyFactor) > 0 ? `<div><dt>Purchase unit</dt><dd>1 ${esc(m.buyUnit)} = ${fq(num(m.buyFactor), m.unit)} ${esc(m.unit)}</dd></div>` : ''}
+        <div><dt>Used as</dt><dd>${[m.useInRecipes === false ? '' : 'Recipe ingredient', m.sellable ? `Sold directly${num(m.sellStep) > 0 && num(m.sellStep) !== 1 ? `, steps of ${fq(num(m.sellStep), m.unit)} ${esc(m.unit)}` : ''}` : ''].filter(Boolean).join('; ') || '<span class="faint">Not set</span>'}</dd></div>
         <div><dt>Purchase tax class</dt><dd>${esc((PURCHASE_TAX.find(x => x[0] === (m.purchaseTax || '')) || PURCHASE_TAX[0])[1])}</dd></div>
         <div><dt>Minimum / order up to</dt><dd>${num(m.minStock) ? qty(num(m.minStock)) + ' ' + esc(m.unit) : '<span class="faint">Not set</span>'}${num(m.par) ? ` <small>/ ${qty(num(m.par))}</small>` : ''}</dd></div>
         <div><dt>Stock value</dt><dd>${M(m.value)}</dd></div>
@@ -3404,7 +3409,7 @@ function openReceive({ materialId, poId } = {}) {
     if (supplier && !model.suppliers.some(x => x.name.trim().toLowerCase() === supplier.toLowerCase())) {
       await saveDoc('suppliers', 's-' + slug(supplier) + '-' + uid().slice(-4), { name: supplier, category: lines[0].m.category || '', leadTime: common.leadTime }, null);
     }
-    toast(lines.length === 1 ? `Received ${fq(lines[0].q)} ${lines[0].m.unit} of ${lines[0].m.name}` : `Delivery saved: ${lines.length} items`);
+    toast(lines.length === 1 ? `Received ${fq(lines[0].q, lines[0].m.unit)} ${lines[0].m.unit} of ${lines[0].m.name}` : `Delivery saved: ${lines.length} items`);
     s.close();
   });
 }
@@ -3452,7 +3457,7 @@ function openIssue({ materialId, recipeId } = {}) {
     const h = line.querySelector('[data-onhand]');
     const q = (num(line.querySelector('[data-k="qty"]').value) || 0) * (m ? unitFactor(m, lineUnit(line, m)) || 1 : 1);
     if (!m) { h.textContent = ''; h.classList.remove('bad'); }
-    else { const over = q > m.onHand + 1e-9; h.textContent = `${fq(m.onHand)} ${m.unit} on hand`; h.classList.toggle('bad', over); if (over) h.textContent = `More than the ${fq(m.onHand)} ${m.unit} on hand`; }
+    else { const over = q > m.onHand + 1e-9; h.textContent = `${fq(m.onHand, m.unit)} ${m.unit} on hand`; h.classList.toggle('bad', over); if (over) h.textContent = `More than the ${fq(m.onHand, m.unit)} ${m.unit} on hand`; }
     total();
   }
   function total() {
@@ -3506,7 +3511,7 @@ function openIssue({ materialId, recipeId } = {}) {
     const purpose = f('purpose').value.trim();
     const rid = fromRecipe && model.recById[fromRecipe] && model.recById[fromRecipe].name === purpose ? fromRecipe : null;
     await addEntries(lines.map(({ m, q, entered }) => ({ id: uid('e'), type: 'issue', date, materialId: m.id, qty: q, unitCost: m.bookCost || 0, unit: m.unit, ...(entered ? { entered } : {}), staff: f('staff').value, purpose, recipeId: rid, remarks: f('remarks').value.trim(), by: ME.id || null, at })));
-    toast(lines.length === 1 ? `Issued ${fq(lines[0].q)} ${lines[0].m.unit} of ${lines[0].m.name}` : `Issue saved: ${lines.length} items`);
+    toast(lines.length === 1 ? `Issued ${fq(lines[0].q, lines[0].m.unit)} ${lines[0].m.unit} of ${lines[0].m.name}` : `Issue saved: ${lines.length} items`);
     s.close();
   });
 }
@@ -3539,7 +3544,7 @@ function openCount() {
     const q = st.q.toLowerCase();
     const list = model.mats.filter(m => (!st.cat || (m.category || 'Other') === st.cat) && (!q || m.name.toLowerCase().includes(q)));
     rowsEl.innerHTML = list.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th class="sticky">Material</th><th>Category</th><th class="num">System</th><th class="num" style="min-width:120px">Counted</th><th class="num">Difference</th></tr></thead><tbody>
-      ${list.map(m => `<tr><td class="sticky"><span class="name">${esc(m.name)}</span></td><td>${catChip(m.category)}</td><td class="num">${qty(m.onHand)} <span class="faint">${esc(m.unit)}</span></td>
+      ${list.map(m => `<tr><td class="sticky"><span class="name">${esc(m.name)}</span></td><td>${catChip(m.category)}</td><td class="num">${fq(m.onHand, m.unit)} <span class="faint">${esc(m.unit)}</span></td>
         <td class="num"><input inputmode="decimal" data-cid="${esc(m.id)}" value="${esc(counted[m.id] ?? '')}" style="text-align:right" aria-label="Counted ${esc(m.name)} in ${esc(m.unit)}"></td>
         <td class="num" data-diff="${esc(m.id)}">${diffCell(m)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">No materials match.</p>';
   }
@@ -4188,7 +4193,7 @@ function openWaste({ materialId, recipeId, dish } = {}) {
     const m = model.matById[line.querySelector('[data-k="mat"]').value];
     setUnitPicker(line, m);
     const q = (num(line.querySelector('[data-k="qty"]').value) || 0) * (m ? unitFactor(m, lineUnit(line, m)) || 1 : 1);
-    line.querySelector('[data-cost]').textContent = m ? `${money(q * (m.bookCost || 0))}, ${fq(m.onHand)} ${m.unit} on hand` : '';
+    line.querySelector('[data-cost]').textContent = m ? `${money(q * (m.bookCost || 0))}, ${fq(m.onHand, m.unit)} ${m.unit} on hand` : '';
     total();
   }
   function total() {
@@ -4436,7 +4441,7 @@ async function pdfCountSheet(cat, showSys) {
   const body = []; let n = 0;
   for (const c of cats) {
     body.push([{ content: c, colSpan: head.length, styles: { fillColor: [246, 247, 248], fontStyle: 'bold', textColor: [70, 80, 86], minCellHeight: 16, halign: 'left' } }]);
-    for (const m of groups[c].sort(byName)) { n++; body.push([n, m.name, m.unit, ...(showSys ? [qty(m.onHand)] : []), '', '', '']); }
+    for (const m of groups[c].sort(byName)) { n++; body.push([n, m.name, m.unit, ...(showSys ? [fq(m.onHand, m.unit)] : []), '', '', '']); }
   }
   const o = showSys ? 1 : 0;
   const cs = { 0: NUMCOL, 2: { cellWidth: 40 }, [3 + o]: { cellWidth: 66 }, [4 + o]: { cellWidth: 66 } };
@@ -4625,7 +4630,7 @@ function cartShortages(cat) {
   }
   for (const l of Cart.lines) {
     const it = cat.byKey[l.key]; if (!it) continue;
-    if (it.kind === 'resale') { const m = it.m; if (need[m.id] > m.onHand + 1e-9) out[l.key] = m.onHand > 1e-9 ? `Only ${fq(m.onHand)} ${m.unit} in stock` : 'None in stock'; }
+    if (it.kind === 'resale') { const m = it.m; if (need[m.id] > m.onHand + 1e-9) out[l.key] = m.onHand > 1e-9 ? `Only ${fq(m.onHand, m.unit)} ${m.unit} in stock` : 'None in stock'; }
     else if (it.order) { const sh = (it.r.rc.lines || []).filter(x => x.m && x.qtyInv > 0 && need[x.m.id] > x.m.onHand + 1e-9).map(x => x.m.name); if (sh.length) out[l.key] = `Not enough ${sh.slice(0, 2).join(' and ')}${sh.length > 2 ? ` and ${sh.length - 2} more` : ''}`; }
     else { const have = Math.max(0, it.r.fg ? it.r.fg.onHand : 0); if (needFg[it.r.id] > have + 1e-9) out[l.key] = have >= it.factor ? `Only ${qty(Math.floor(have / it.factor + 1e-9))} prepared` : 'None prepared'; }
   }
@@ -4641,7 +4646,7 @@ function chargeLabel(t) {
   return `Charge ${money(t.total)}`;
 }
 const saleUnit = it => it.unit || (it.materialId && model && model.matById[it.materialId] ? model.matById[it.materialId].unit : '');
-const soldQty = it => { const u = it.materialId ? saleUnit(it) : ''; return u ? `${fq(num(it.qty))} ${u}` : qty(num(it.qty)); };
+const soldQty = it => { const u = it.materialId ? saleUnit(it) : ''; return u ? `${fq(num(it.qty), u)} ${u}` : qty(num(it.qty)); };
 const perUnit = it => { const u = it.materialId ? saleUnit(it) : ''; return u ? `per ${u}` : 'each'; };
 const stepOf = key => { const it = posCatalog().byKey[key]; return it && it.step > 0 ? it.step : 1; };
 function addToCart(key) {
@@ -4723,13 +4728,13 @@ Views.sell = {
 function prodTile(i, inCart) {
   let stock, cls = '';
   if (i.order) { stock = !i.can ? 'Made to order' : i.can.n <= 0 ? `Out: no ${i.can.short.name}` : `Can make ${i.can.n}`; cls = i.can && i.can.n <= 0 ? 'bad' : i.can && i.can.n <= 5 ? 'warn' : ''; }
-  else if (i.kind === 'resale') { const min = num(i.m.minStock) || 0, low = min > 0 ? i.left <= min : i.left <= 5 * (i.step || 1); stock = i.left <= 1e-9 ? 'Out of stock' : `${low ? 'Low stock' : 'In stock'}: ${fq(i.left)} ${i.unit}`; cls = i.left <= 1e-9 ? 'bad' : low ? 'warn' : 'ok'; }
+  else if (i.kind === 'resale') { const min = num(i.m.minStock) || 0, low = min > 0 ? i.left <= min : i.left <= 5 * (i.step || 1); stock = i.left <= 1e-9 ? 'Out of stock' : `${low ? 'Low stock' : 'In stock'}: ${fq(i.left, i.unit)} ${i.unit}`; cls = i.left <= 1e-9 ? 'bad' : low ? 'warn' : 'ok'; }
   else { stock = i.left <= 0 ? 'Out: none prepared' : `${i.left <= 3 ? 'Low: ' : ''}${i.left} prepared`; cls = i.left <= 0 ? 'bad' : i.left <= 3 ? 'warn' : ''; }
   const taxBlocked = i.vatUnset && model.S.unreviewedTax === 'block' && model.S.vatRegistered !== false;
   return `<button type="button" class="prod" data-add="${esc(i.key)}" style="--c:${catColor(i.category)}" ${i.price == null ? `disabled title="${i.kind === 'resale' ? 'No price yet: edit this item under Stock and enter a selling price' : 'No price yet: complete the recipe\u2019s ingredient prices or enter a menu price'}"` : ''}>
     <span class="prod-name">${esc(i.name)}</span>${i.size ? `<span class="prod-size">${esc(i.size)}</span>` : ''}
     <span class="prod-price">${i.price != null ? money(i.price, i.price % 1 ? 2 : 0) + (i.kind === 'resale' ? `<small> / ${esc(i.unit)}</small>` : '') : 'No price yet'}</span>
-    <span class="prod-stock ${cls}">${esc(stock)}${model.S.vatRegistered === false ? '' : i.vatUnset ? `<span class="tax-flag${taxBlocked ? ' bad' : ''}">${taxBlocked ? 'Set tax class to sell' : 'Tax class not reviewed'}</span>` : i.vat && i.vat !== 'vatable' ? `<span class="faint">, ${esc(vatShort(i.vat))}</span>` : ''}</span>${inCart ? `<span class="prod-badge" aria-label="${esc(fq(inCart))} in order">${esc(fq(inCart))}</span>` : ''}</button>`;
+    <span class="prod-stock ${cls}">${esc(stock)}${model.S.vatRegistered === false ? '' : i.vatUnset ? `<span class="tax-flag${taxBlocked ? ' bad' : ''}">${taxBlocked ? 'Set tax class to sell' : 'Tax class not reviewed'}</span>` : i.vat && i.vat !== 'vatable' ? `<span class="faint">, ${esc(vatShort(i.vat))}</span>` : ''}</span>${inCart ? `<span class="prod-badge" aria-label="${esc(fq(inCart, i.unit))} in order">${esc(fq(inCart, i.unit))}</span>` : ''}</button>`;
 }
 function renderCart(root, cat) {
   if (!root) return;
@@ -4742,9 +4747,10 @@ function renderCart(root, cat) {
     ${customerRow(cat)}
     <div class="cart-body">${t.lines.length ? `<ul class="cart-lines">${t.lines.map(l => { const it = l.item; const over = shorts[l.key];
       return `<li><div class="cl-name"><b>${esc(it.name)}</b>${it.size ? ` <span class="muted">${esc(it.size)}</span>` : ''}<div class="small faint">${money(it.price)} ${it.kind === 'resale' ? 'per ' + esc(it.unit) : 'each'}</div>${over ? `<div class="small st bad">${esc(over)}</div>` : ''}</div>
-        <div class="stepper"><button type="button" data-dec="${esc(l.key)}" aria-label="Less ${esc(it.name)}">\u2212</button><input class="qty-in" inputmode="${it.kind === 'resale' ? 'decimal' : 'numeric'}" data-qty="${esc(l.key)}" value="${it.kind === 'resale' ? esc(fq(l.qty).replace(/,/g, '')) : l.qty}" aria-label="Quantity of ${esc(it.name)}${it.kind === 'resale' ? ' in ' + esc(it.unit) : ''}" autocomplete="off"><button type="button" data-inc="${esc(l.key)}" aria-label="More ${esc(it.name)}">+</button></div>
+        <div class="stepper"><button type="button" data-dec="${esc(l.key)}" aria-label="Less ${esc(it.name)}">\u2212</button><input class="qty-in" inputmode="${it.kind === 'resale' ? 'decimal' : 'numeric'}" data-qty="${esc(l.key)}" value="${it.kind === 'resale' ? esc(fq(l.qty, it.unit).replace(/,/g, '')) : l.qty}" aria-label="Quantity of ${esc(it.name)}${it.kind === 'resale' ? ' in ' + esc(it.unit) : ''}" autocomplete="off"><button type="button" data-inc="${esc(l.key)}" aria-label="More ${esc(it.name)}">+</button></div>
         <div class="cl-amt">${money(l.qty * it.price)}</div></li>`; }).join('')}</ul>` : `<p class="cart-empty">Tap items on the menu to start an order.</p>`}
-      ${Cart.lines.length > t.lines.length ? `<p class="small st warn" style="margin-top:8px">Some items have no price on ${esc(cat.ch.name)} and were left out.</p>` : ''}</div>
+      ${(() => { const gone = Cart.lines.filter(l => !t.lines.some(x => x.key === l.key)); if (!gone.length) return ''; const names = [...new Set(gone.map(l => (cat.byKey[l.key] && cat.byKey[l.key].name) || 'An item no longer on the menu'))];
+        return `<div class="cart-note warn">${esc(names.join(', '))} ${names.length === 1 ? 'has' : 'have'} no price on ${esc(cat.ch.name)}, so ${names.length === 1 ? 'it was' : 'they were'} left out of the order. <button type="button" class="btn quiet sm" data-drop-unpriced>Remove from order</button></div>`; })()}</div>
     <div class="cart-foot">
       <div class="cart-row"><div class="cart-disc"><select data-disc-type aria-label="Discount"><option value="none"${d.type === 'none' ? ' selected' : ''}>No discount</option><option value="pct"${d.type === 'pct' ? ' selected' : ''}>Percent off</option><option value="amt"${d.type === 'amt' ? ' selected' : ''}>Amount off</option><option value="senior"${d.type === 'senior' ? ' selected' : ''}>Senior citizen / PWD</option></select>
         ${d.type === 'pct' || d.type === 'amt' ? `<span class="unitbox"><input inputmode="decimal" data-disc-val value="${esc(d.value)}" placeholder="0" aria-label="Discount value"><span>${d.type === 'pct' ? '%' : esc(CUR)}</span></span>` : ''}</div>
@@ -4764,7 +4770,7 @@ function renderCart(root, cat) {
 }
 function totalsHtml(t) {
   const miss = Cart.channel && channelRates(posCatalog().ch, model.S).vatMissing && t.lines.some(l => l.vt === 'vatable');
-  return `${miss ? '<div class="small st warn" style="margin-bottom:6px">VAT rate not set. Enter it in Setup, Tax and stock rules.</div>' : ''}<div class="kv"><span>Subtotal</span><span>${money(t.subtotal)}</span></div>
+  return `${miss ? '<div class="cart-note warn" style="margin:0 0 8px">VAT rate not set. Enter it in Setup, Tax and stock rules.</div>' : ''}<div class="kv"><span>Subtotal</span><span>${money(t.subtotal)}</span></div>
     ${t.disc ? `<div class="kv"><span>Discount</span><span>\u2212${money(t.disc)}</span></div>` : ''}
     <div class="kv total"><span>Total</span><span>${money(t.total)}</span></div>
     ${vatRows(t).map(([k, v]) => `<div class="kv small muted"><span>${esc(k)}</span><span>${money(v)}</span></div>`).join('')}`;
@@ -4808,6 +4814,7 @@ function wireCart(root) {
     const pay = t.closest('[data-payopt]'); if (pay) { Cart.payment = pay.dataset.payopt; if (Cart.payment === 'Split' && !Array.isArray(Cart.split)) Cart.split = [{ m: 'Cash', a: '' }, { m: 'GCash', a: '' }]; saveCart(); refreshPos(); return; }
     const sr = t.closest('[data-split-rest]'); if (sr) { const tt = cartTotals(posCatalog()), i = +sr.dataset.splitRest; const others = Cart.split.reduce((a, r, k) => a + (k === i ? 0 : num(r.a) || 0), 0); Cart.split[i].a = String(Math.max(0, Math.round((tt.amountNow - others) * 100) / 100)); saveCart(); refreshPos(); return; }
     const sx = t.closest('[data-split-rm]'); if (sx) { Cart.split.splice(+sx.dataset.splitRm, 1); saveCart(); refreshPos(); return; }
+    if (t.closest('[data-drop-unpriced]')) { const keep = new Set(cartTotals(posCatalog()).lines.map(x => x.key)); Cart.lines = Cart.lines.filter(l => keep.has(l.key)); saveCart(); refreshPos(); return; }
     if (t.closest('[data-split-add]')) { const used = Cart.split.map(r => r.m); Cart.split.push({ m: PAYMENTS.find(pm => !used.includes(pm)) || 'Cash', a: '' }); saveCart(); refreshPos(); return; }
     const term = t.closest('[data-term]'); if (term) { Cart.terms = term.dataset.term; if (Cart.terms !== 'full' && !Cart.due) Cart.due = addDays(today(), 7); if (Cart.terms !== 'partial') Cart.paidNow = ''; saveCart(); refreshPos(); return; }
     const qk = t.closest('[data-quick]'); if (qk) { Cart.received = qk.dataset.quick; saveCart(); refreshPos(); return; }
@@ -5773,7 +5780,7 @@ Views.reports = {
         ${items.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th class="num w-min">#</th><th class="sticky">Item</th><th>Category</th><th class="num">Qty sold</th><th class="num">Orders</th><th class="num">Sales</th><th class="num">Share</th><th class="num">Gross profit</th><th class="num">Margin</th>${hc ? '<th class="num">Qty vs before</th>' : ''}</tr></thead><tbody>
           ${shownItems.map((x, i) => { const open = x.recipeId && model.recById[x.recipeId] ? `data-open="recipe" data-id="${esc(x.recipeId)}" data-size="${esc(x.sizeId || 'base')}"` : x.materialId && model.matById[x.materialId] ? `data-open="mat" data-id="${esc(x.materialId)}"` : '';
             const dq = x.prevQty != null ? chg2(x.qty, x.prevQty) : null;
-            return `<tr ${open}><td class="num faint">${i + 1}</td><td class="sticky"><span class="name">${esc(x.name)}</span>${x.size ? ` <span class="muted">${esc(x.size)}</span>` : ''}</td><td>${catChip(x.cat)}</td><td class="num">${x.unit ? `${fq(x.qty)} <span class="faint">${esc(x.unit)}</span>` : qty(x.qty)}</td><td class="num">${x.orders}</td><td class="num"><b>${money(x.net)}</b></td><td class="num">${pct(A.net ? x.net / A.net : 0)}</td><td class="num">${money(x.gp)}</td><td class="num">${P2(x.margin)}</td>
+            return `<tr ${open}><td class="num faint">${i + 1}</td><td class="sticky"><span class="name">${esc(x.name)}</span>${x.size ? ` <span class="muted">${esc(x.size)}</span>` : ''}</td><td>${catChip(x.cat)}</td><td class="num">${x.unit ? `${fq(x.qty, x.unit)} <span class="faint">${esc(x.unit)}</span>` : qty(x.qty)}</td><td class="num">${x.orders}</td><td class="num"><b>${money(x.net)}</b></td><td class="num">${pct(A.net ? x.net / A.net : 0)}</td><td class="num">${money(x.gp)}</td><td class="num">${P2(x.margin)}</td>
               ${hc ? `<td class="num">${x.prevQty ? `<span class="${dq > 0 ? 'chg-down' : dq < 0 ? 'chg-up' : ''}">${dq > 0 ? '+' : ''}${pct(dq, 0)}</span> <span class="faint small">from ${qty(x.prevQty)}</span>` : '<span class="small">New</span>'}</td>` : ''}</tr>`; }).join('')}
         </tbody></table></div>${items.length > 15 ? `<div class="more"><button class="btn ghost sm" data-allitems>${ui.sr.allItems ? 'Show top 15' : `Show all ${items.length} items`}</button></div>` : ''}` : '<div class="panel empty" style="padding:20px"><p>No items sold in this period.</p></div>'}
         ${slow.length ? `<p class="small muted" style="margin-top:10px"><b>Not sold this ${P.unit}:</b> ${slow.slice(0, 30).map(esc).join(', ')}${slow.length > 30 ? `, and ${slow.length - 30} more` : ''}.</p>` : ''}
