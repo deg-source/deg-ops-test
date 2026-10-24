@@ -151,3 +151,4 @@ This app prints order slips, not BIR-registered invoices. Check your VAT setup a
 - **Changes are refused as "view-only" for everyone:** the setup script didn't finish, so there are no rows in **profiles**. Run `supabase-setup.sql` again. People created before the script ran are added when it runs.
 - **Other people's changes only appear after reopening:** live updates aren't on. Run the setup script again, or check **Database → Publications** that the `docs` table is included in `supabase_realtime`.
 - **The address shows "404":** GitHub Pages is still publishing (wait two minutes), or `index.html` isn't at the top level of the repository.
+- Test website deployment check
